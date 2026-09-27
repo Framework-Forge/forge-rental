@@ -27,5 +27,4 @@ files {
 
 dependencies {
     'pr_bridge',
-    'ox_lib',
 }

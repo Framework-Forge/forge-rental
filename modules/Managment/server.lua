@@ -436,9 +436,14 @@ end
 local function setRentalVehicleState(vehicle)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then return end
 
-    local state = Entity(vehicle).state
-    state:set('rental', true, true)
-    state:set('door', 1, true)
+    local vehicleCache = pr_lib.fivem and pr_lib.fivem.vehicleCache
+    if not vehicleCache then
+        debug('warn', 'vehicleCache unavailable while registering rental vehicle')
+        return
+    end
+
+    vehicleCache.setState(vehicle, 'rental', true, true)
+    vehicleCache.setState(vehicle, 'door', 1, true)
     SetVehicleDoorsLocked(vehicle, 1)
 end
 
@@ -691,16 +696,25 @@ end)
 RentalService.loadConfig()
 RentalService.loadDebts()
 
-pr_lib.addCommand(RentalService.config.command or 'rentaladmin', {
-    help = locale('Admin.CommandHelp'),
-    restricted = 'group.admin',
-}, function(source)
+local function openAdminMenu(source, origin)
     if not hasAdminAccess(source) then
         notifyPlayer(source, locale('Admin.NoPermission'), 'error')
         return
     end
 
-    pr_lib.callback.awaitClient(source, 'forge-rental:client:openAdminMenu', 5000, RentalService.config)
+    local parent = origin == 'forge-core' and 'forge-core' or nil
+    pr_lib.callback.awaitClient(source, 'forge-rental:client:openAdminMenu', 5000, RentalService.config, parent)
+end
+
+RegisterNetEvent('forge-rental:server:openAdminMenu', function(origin)
+    openAdminMenu(source, origin)
+end)
+
+pr_lib.addCommand(RentalService.config.command or 'rentaladmin', {
+    help = locale('Admin.CommandHelp'),
+    restricted = 'group.admin',
+}, function(source)
+    openAdminMenu(source)
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)

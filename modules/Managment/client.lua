@@ -3,6 +3,7 @@ RentalClient = RentalClient or {
     entities = {},
     blips = {},
     adminConfig = nil,
+    adminParent = nil,
 }
 
 local notify
@@ -192,7 +193,11 @@ local function setVehicleFuel(vehicle, amount)
     end
 
     SetVehicleFuelLevel(vehicle, amount + 0.0)
-    Entity(vehicle).state:set('fuel', amount + 0.0, true)
+    if pr_lib.fivem and pr_lib.fivem.vehicleCache then
+        pr_lib.fivem.vehicleCache.setState(vehicle, 'fuel', amount + 0.0, true)
+    else
+        debug('warn', 'vehicleCache unavailable while synchronizing fuel')
+    end
 end
 
 local function calculateReturnPreview(metadata, vehicle)
@@ -428,7 +433,7 @@ local function rentalReturnOptions(location)
                         { label = locale('RentalMenus.ReturnFuelFee'), value = formatMoney(preview.fuelFee) },
                         { label = locale('RentalMenus.ReturnTotal'), value = formatMoney(preview.total) },
                     },
-                    icon = 'fa-solid fa-rotate-left',
+                    icon = 'arrow-counterclockwise',
                     iconColor = 'red',
                     onSelect = function()
                         local matchedNetId, vehicle = checkForMatchedPlate(item.metadata.plate)
@@ -481,7 +486,7 @@ local function appendDebtOptions(options, locationId)
     options[#options + 1] = {
         title = locale('RentalMenus.DebtTitle'),
         description = locale('RentalMenus.DebtDescription', summary.count or 1, formatMoney(summary.total)),
-        icon = 'fa-solid fa-file-invoice-dollar',
+        icon = 'receipt-cutoff',
         iconColor = 'red',
         metadata = metadata,
         onSelect = function()
@@ -507,7 +512,7 @@ function RentalClient.openRentalMenu(locationId)
         {
             title = location.label,
             description = locale('RentalMenus.TitleDescription'),
-            icon = 'fa-solid fa-car',
+            icon = 'car-front-fill',
             iconColor = 'orange',
             disabled = true,
         },
@@ -523,7 +528,7 @@ function RentalClient.openRentalMenu(locationId)
             options[#options + 1] = {
                 title = vehicle.label,
                 description = hasDebt and locale('RentalMenus.DebtBlocksRent') or locale('RentalMenus.MenuDescription', vehicle.label, formatMoney(billing.insuranceFee), billing.timeIntervalMinutes, formatMoney(billing.pricePerInterval), formatMoney(billing.fuelPricePerLiter)),
-                icon = 'fa-solid fa-car-side',
+                icon = 'car-front',
                 iconColor = hasDebt and 'gray' or 'orange',
                 disabled = hasDebt,
                 onSelect = function()
@@ -573,7 +578,7 @@ local function findClearSpawnPoint(spawnPoints, radius)
     return nil
 end
 
-PRCore.callback.register('forge-rental:client:createVehicle', function(_, model, spawnPoints, spawnRadius, fullTankLiters)
+PRCore.callback.register('forge-rental:client:createVehicle', function(model, spawnPoints, spawnRadius, fullTankLiters)
     local spawn = findClearSpawnPoint(spawnPoints, spawnRadius)
     if not spawn then return false, false end
 
@@ -638,11 +643,17 @@ local function openAdminMain()
     registerContext({
         id = 'forge_rental_admin_main',
         title = locale('Admin.Title'),
+        menu = RentalClient.adminParent and 'forge_core_main' or nil,
+        onBack = RentalClient.adminParent and function()
+            SetTimeout(0, function()
+                TriggerEvent('forge-core:client:openAdminMenu')
+            end)
+        end or nil,
         options = {
             {
                 title = locale('Admin.Settings'),
                 description = locale('Admin.SettingsDescription'),
-                icon = 'fa-solid fa-gear',
+                icon = 'gear-fill',
                 onSelect = function()
                     RentalClient.openAdminSettings()
                 end,
@@ -650,7 +661,7 @@ local function openAdminMain()
             {
                 title = locale('Admin.Locations'),
                 description = locale('Admin.LocationCount', #locations),
-                icon = 'fa-solid fa-location-dot',
+                icon = 'geo-alt-fill',
                 onSelect = function()
                     RentalClient.openAdminLocations()
                 end,
@@ -658,7 +669,7 @@ local function openAdminMain()
             {
                 title = locale('Admin.Reload'),
                 description = locale('Admin.ReloadDescription'),
-                icon = 'fa-solid fa-rotate',
+                icon = 'arrow-clockwise',
                 onSelect = function()
                     if reloadAdminConfig() then openAdminMain() end
                 end,
@@ -728,7 +739,7 @@ function RentalClient.openAdminLocations()
         {
             title = locale('Admin.CreateLocation'),
             description = locale('Admin.CreateLocationDescription'),
-            icon = 'fa-solid fa-plus',
+            icon = 'plus-lg',
             onSelect = function()
                 RentalClient.createLocation()
             end,
@@ -740,7 +751,7 @@ function RentalClient.openAdminLocations()
         options[#options + 1] = {
             title = location.label,
             description = locale('Admin.LocationDescription', location.enabled and locale('Admin.Active') or locale('Admin.Inactive'), #(location.stock or {}), #(location.vehicleSpawn or {})),
-            icon = location.enabled and 'fa-solid fa-location-dot' or 'fa-regular fa-circle',
+            icon = location.enabled and 'geo-alt-fill' or 'circle',
             iconColor = location.enabled and 'green' or 'gray',
             onSelect = function()
                 RentalClient.openLocation(location.id)
@@ -783,7 +794,7 @@ function RentalClient.createLocation()
         { type = 'input', label = locale('Admin.Model'), default = 's_m_m_highsec_01', required = true },
         { type = 'number', label = locale('Admin.BlipSprite'), default = 227, required = true },
         { type = 'number', label = locale('Admin.BlipColor'), default = 5, required = true },
-        { type = 'number', label = locale('Admin.BlipScale'), default = 0.8, required = true, min = 0.1 },
+        { type = 'number', label = locale('Admin.BlipScale'), default = 0.8, required = true, min = 0.1, step = 0.1, precision = 1 },
     })
 
     if not result then return RentalClient.openAdminLocations() end
@@ -844,7 +855,7 @@ function RentalClient.openLocation(locationId)
             {
                 title = locale('Admin.EditLocation'),
                 description = locale('Admin.EditLocationDescription', formatCoords(location.coords)),
-                icon = 'fa-solid fa-pen',
+                icon = 'pencil-fill',
                 onSelect = function()
                     RentalClient.editLocation(location.id)
                 end,
@@ -852,7 +863,7 @@ function RentalClient.openLocation(locationId)
             {
                 title = locale('Admin.Stock'),
                 description = locale('Admin.StockDescription', #(location.stock or {})),
-                icon = 'fa-solid fa-car',
+                icon = 'car-front-fill',
                 onSelect = function()
                     RentalClient.openStock(location.id)
                 end,
@@ -860,7 +871,7 @@ function RentalClient.openLocation(locationId)
             {
                 title = locale('Admin.Spawns'),
                 description = locale('Admin.SpawnDescription', #(location.vehicleSpawn or {})),
-                icon = 'fa-solid fa-square-parking',
+                icon = 'p-square-fill',
                 onSelect = function()
                     RentalClient.openSpawns(location.id)
                 end,
@@ -868,7 +879,7 @@ function RentalClient.openLocation(locationId)
             {
                 title = locale('Admin.Teleport'),
                 description = formatCoords(location.coords),
-                icon = 'fa-solid fa-location-arrow',
+                icon = 'cursor-fill',
                 onSelect = function()
                     SetEntityCoords(PlayerPedId(), location.coords.x, location.coords.y, location.coords.z, false, false, false, false)
                     SetEntityHeading(PlayerPedId(), numberValue(location.coords.w))
@@ -878,7 +889,7 @@ function RentalClient.openLocation(locationId)
             {
                 title = locale('Admin.RepositionLocation'),
                 description = locale('Admin.RepositionLocationDescription'),
-                icon = 'fa-solid fa-crosshairs',
+                icon = 'crosshair',
                 onSelect = function()
                     notify(locale('Admin.PlaceEntityPrompt'), 'inform')
                     placeRentalEntity(location.model, location.entityType, function(coords)
@@ -895,7 +906,7 @@ function RentalClient.openLocation(locationId)
             },
             {
                 title = location.enabled and locale('Admin.DisableLocation') or locale('Admin.EnableLocation'),
-                icon = location.enabled and 'fa-solid fa-toggle-off' or 'fa-solid fa-toggle-on',
+                icon = location.enabled and 'toggle-off' or 'toggle-on',
                 iconColor = location.enabled and 'red' or 'green',
                 onSelect = function()
                     location.enabled = not location.enabled
@@ -905,7 +916,7 @@ function RentalClient.openLocation(locationId)
             },
             {
                 title = locale('Admin.DeleteLocation'),
-                icon = 'fa-solid fa-trash',
+                icon = 'trash-fill',
                 iconColor = 'red',
                 onSelect = function()
                     RentalClient.deleteLocation(location.id)
@@ -944,7 +955,7 @@ function RentalClient.editLocation(locationId)
         { type = 'input', label = locale('Admin.Model'), default = location.model, required = true },
         { type = 'number', label = locale('Admin.BlipSprite'), default = location.blip and location.blip.sprite or 227, required = true },
         { type = 'number', label = locale('Admin.BlipColor'), default = location.blip and location.blip.color or 5, required = true },
-        { type = 'number', label = locale('Admin.BlipScale'), default = location.blip and location.blip.scale or 0.8, required = true, min = 0.1 },
+        { type = 'number', label = locale('Admin.BlipScale'), default = location.blip and location.blip.scale or 0.8, required = true, min = 0.1, step = 0.1, precision = 1 },
         { type = 'input', label = locale('Admin.AnimDict'), default = location.animdata and location.animdata.dict or '' },
         { type = 'input', label = locale('Admin.AnimName'), default = location.animdata and location.animdata.anim or '' },
         { type = 'number', label = locale('Admin.AnimFlags'), default = location.animdata and location.animdata.flags or 1 },
@@ -995,7 +1006,7 @@ function RentalClient.openStock(locationId)
         {
             title = locale('Admin.AddVehicle'),
             description = locale('Admin.AddVehicleDescription'),
-            icon = 'fa-solid fa-plus',
+            icon = 'plus-lg',
             onSelect = function()
                 RentalClient.addStock(location.id)
             end,
@@ -1007,7 +1018,7 @@ function RentalClient.openStock(locationId)
         options[#options + 1] = {
             title = item.label,
             description = locale('Admin.VehicleDescription', item.model, formatMoney(item.price), item.enabled and locale('Admin.Active') or locale('Admin.Inactive')),
-            icon = item.enabled and 'fa-solid fa-car-side' or 'fa-regular fa-circle',
+            icon = item.enabled and 'car-front' or 'circle',
             iconColor = item.enabled and 'green' or 'gray',
             onSelect = function()
                 RentalClient.editStock(location.id, item.model)
@@ -1121,7 +1132,7 @@ function RentalClient.openSpawns(locationId)
         {
             title = locale('Admin.AddSpawn'),
             description = locale('Admin.AddSpawnDescription'),
-            icon = 'fa-solid fa-plus',
+            icon = 'plus-lg',
             onSelect = function()
                 placeVehicleSpawns(previewModel, function(spawns)
                     if type(spawns) ~= 'table' or #spawns < 1 then
@@ -1145,7 +1156,7 @@ function RentalClient.openSpawns(locationId)
         options[#options + 1] = {
             title = locale('Admin.SpawnTitle', index),
             description = formatCoords(spawn),
-            icon = 'fa-solid fa-square-parking',
+            icon = 'p-square-fill',
             onSelect = function()
                 RentalClient.openSpawn(location.id, index)
             end,
@@ -1175,7 +1186,7 @@ function RentalClient.openSpawn(locationId, spawnIndex)
             {
                 title = locale('Admin.Teleport'),
                 description = formatCoords(spawn),
-                icon = 'fa-solid fa-location-arrow',
+                icon = 'cursor-fill',
                 onSelect = function()
                     SetEntityCoords(PlayerPedId(), spawn.x, spawn.y, spawn.z, false, false, false, false)
                     SetEntityHeading(PlayerPedId(), numberValue(spawn.w))
@@ -1185,7 +1196,7 @@ function RentalClient.openSpawn(locationId, spawnIndex)
             {
                 title = locale('Admin.UpdateSpawn'),
                 description = locale('Admin.UpdateSpawnDescription'),
-                icon = 'fa-solid fa-crosshairs',
+                icon = 'crosshair',
                 onSelect = function()
                     placeVehicleSpawns(previewModel, function(spawns)
                         if type(spawns) ~= 'table' or not spawns[1] then
@@ -1201,7 +1212,7 @@ function RentalClient.openSpawn(locationId, spawnIndex)
             },
             {
                 title = locale('Admin.RemoveSpawn'),
-                icon = 'fa-solid fa-trash',
+                icon = 'trash-fill',
                 iconColor = 'red',
                 onSelect = function()
                     table.remove(location.vehicleSpawn, spawnIndex)
@@ -1213,13 +1224,14 @@ function RentalClient.openSpawn(locationId, spawnIndex)
     })
 end
 
-PRCore.callback.register('forge-rental:client:refreshConfig', function(_, config)
+PRCore.callback.register('forge-rental:client:refreshConfig', function(config)
     RentalClient.applyConfig(config)
     return true
 end)
 
-PRCore.callback.register('forge-rental:client:openAdminMenu', function(_, config)
+PRCore.callback.register('forge-rental:client:openAdminMenu', function(config, parent)
     RentalClient.adminConfig = config
+    RentalClient.adminParent = parent == 'forge-core' and parent or nil
     openAdminMain()
     return true
 end)

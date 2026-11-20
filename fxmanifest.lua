@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'Forge - PierreMoraes'
 description 'Sistema de aluguel de veiculos para FiveM by Forge.'
-version '0.1.0'
+version '0.1.2'
 
 shared_scripts {
     '@pr_bridge/init.lua',
@@ -28,3 +28,5 @@ files {
 dependencies {
     'pr_bridge',
 }
+
+server_script 'server/version.lua'
